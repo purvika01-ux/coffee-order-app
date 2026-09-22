@@ -100,6 +100,13 @@ function OrderForm() {
     // Guard against a double-click firing two orders.
     if (isSubmitting) return;
 
+    // Work out the price HERE, from the coffee that is selected right now.
+    // Doing the lookup inside this function (rather than relying on a value
+    // calculated elsewhere) means what we save is always what was on screen.
+    const chosenCoffee = coffees.find((c) => c.name === formData.product);
+    const priceEach = chosenCoffee ? chosenCoffee.price : 0;
+    const orderQuantity = Number(formData.quantity);
+
     // THE ORDER OBJECT, in database shape (snake_case column names).
     // We generate the id ourselves instead of letting the database do it.
     // Why? Our security rules allow INSERT but not SELECT, so the database
@@ -112,11 +119,22 @@ function OrderForm() {
       customer_email: formData.customerEmail.trim(),
       phone: formData.phone.trim(),
       product: formData.product,
-      quantity: Number(formData.quantity),
+      quantity: orderQuantity,
+      // The price PER CUP, copied onto the order as it is right now. If the
+      // menu price changes later, this order still shows what was charged.
+      unit_price: priceEach,
+      // The line total. We send this explicitly so the exact same number goes
+      // to the database AND to the email — no chance of the two disagreeing.
+      total_amount: priceEach * orderQuantity,
       instructions: formData.instructions.trim(),
     };
 
     console.log("Order placed:", order);
+    // Handy while testing — shows the two money values without expanding the
+    // object above. Safe to delete once you are happy it works.
+    console.log(
+      `Price check -> unit: ${order.unit_price}, total: ${order.total_amount}`
+    );
 
     // Turn on the loading state and clear old banners.
     setIsSubmitting(true);
@@ -125,8 +143,17 @@ function OrderForm() {
     setWarningMessage("");
 
     // ── STEP 1: save the order in Supabase ────────────────────────────────
+    // `total_amount` is a GENERATED column: Postgres works it out itself from
+    // unit_price * quantity, and refuses any value we try to send. So we copy
+    // the order and remove that one field before inserting. The original
+    // `order` object keeps it, because the email still needs it.
+    const orderForDatabase = { ...order };
+    delete orderForDatabase.total_amount;
+
     // We do NOT call .select() here, for the reason explained above.
-    const { error: supabaseError } = await supabase.from("orders").insert(order);
+    const { error: supabaseError } = await supabase
+      .from("orders")
+      .insert(orderForDatabase);
 
     // CASE 1 — the database failed. Stop completely.
     // Do NOT send an email about an order that was never saved.
@@ -148,7 +175,7 @@ function OrderForm() {
       // CASE 3 — everything worked.
       setSuccessMessage("Order placed successfully!");
     } catch (emailError) {
-      // CASE 2 — order saved, email failed.
+       // CASE 2 — order saved, email failed.
       console.error("EmailJS send failed:", emailError);
       setWarningMessage(
         "Order was created, but the confirmation email could not be sent."
@@ -167,6 +194,14 @@ function OrderForm() {
       instructions: "",
     });
   }
+
+  // ── Derived values ──────────────────────────────────────────────────────
+  // These are recalculated on every render from the current form state.
+  // They are NOT useState, because they can always be worked out from
+  // `formData` — storing them separately would risk them getting out of sync.
+  const selectedCoffee = coffees.find((c) => c.name === formData.product);
+  const unitPrice = selectedCoffee ? selectedCoffee.price : 0;
+  const totalAmount = unitPrice * Number(formData.quantity || 0);
 
   // Shared CSS classes so every input looks the same.
   const inputClasses =
@@ -302,6 +337,18 @@ function OrderForm() {
               className={inputClasses}
             />
           </div>
+
+          {/* Live order total. Only shown once a coffee is actually chosen. */}
+          {selectedCoffee && (
+            <div className="flex items-center justify-between rounded-lg bg-amber-100 px-4 py-3">
+              <span className="text-sm text-amber-900">
+                ₹{unitPrice} × {Number(formData.quantity) || 0}
+              </span>
+              <span className="text-lg font-bold text-amber-950">
+                Total: ₹{totalAmount}
+              </span>
+            </div>
+          )}
 
           <button
             type="submit"

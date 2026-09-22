@@ -92,6 +92,8 @@ The `orders` table:
 | `phone`          | `text`        | Optional                       |
 | `product`        | `text`        | Required                       |
 | `quantity`       | `integer`     | Required, must be >= 1         |
+| `unit_price`     | `integer`     | Price per cup at order time    |
+| `total_amount`   | `integer`     | Generated: `unit_price * quantity` |
 | `instructions`   | `text`        | Optional                       |
 | `created_at`     | `timestamptz` | Defaults to `now()`            |
 

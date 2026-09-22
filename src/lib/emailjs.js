@@ -32,6 +32,8 @@ export function sendOrderEmail(order) {
     phone: orDash(order.phone),
     product: order.product,
     quantity: order.quantity,
+    unit_price: order.unit_price,
+    total_amount: order.total_amount,
     instructions: orDash(order.instructions),
   };
 
